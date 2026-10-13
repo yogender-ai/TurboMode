@@ -1,134 +1,150 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/yogender-ai/TurboMode/main/turbo.ico" width="96" alt="Turbo Mode">
+<img src="docs/dashboard.png" width="820" alt="Turbo Mode dashboard">
 
 # ⚡ TURBO MODE v5.0
 
-**A Windows performance booster for gamers and developers. It auto-boosts when your game launches, guards your FPS while you play, and restores everything when you quit.**
+**One-click performance booster for Windows.** Free up RAM and CPU for games and work, then undo everything with one button. No commands, no setup.
 
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)
-![PowerShell](https://img.shields.io/badge/PowerShell-5.1-5391FE?style=for-the-badge&logo=powershell&logoColor=white)
-![C#](https://img.shields.io/badge/C%23-.NET%204-512BD4?style=for-the-badge&logo=csharp&logoColor=white)
+![No install](https://img.shields.io/badge/Install-none%20needed-2ECC71?style=for-the-badge)
+![C#](https://img.shields.io/badge/C%23-WinForms-512BD4?style=for-the-badge&logo=csharp&logoColor=white)
+![PowerShell](https://img.shields.io/badge/Engine-PowerShell-5391FE?style=for-the-badge&logo=powershell&logoColor=white)
 
 </div>
 
 ---
 
-## ✨ Features
+## 🚀 Getting started (30 seconds)
 
-| # | Mode | What it does |
-|---|---|---|
-| 1 | 🎮 **Game Mode** | Closes every app in your session except your game + anti-cheat, cleans junk, sets max performance, raises game priority |
-| 2 | 🎯 **Game Watcher** | **Set and forget.** Waits for any game in your list, boosts automatically, keeps relaunching background apps closed while you play, then **auto-restores** when the game exits |
-| 3 | 💼 **Work Mode** | Kills gaming / media / bloat apps only, and keeps your IDE, browser, Slack, Teams and Docker |
-| 4 | 🧩 **Custom Mode** | Interactive picker: numbers, ranges (`3-7`), `big` (>100 MB), `cat Browser`, and save/load **profiles** |
-| 5 | 🧹 **Deep Clean** | Junk files + **developer caches** (npm, pip, yarn, pnpm, NuGet, Go) + optimizations, with no kills |
-| 6 | 📈 **Live Monitor** | Real-time CPU / RAM bars, ping, and the top 8 apps by CPU and RAM. Flicker-free redraw. |
-| 7 | 📊 **System View** | Full stats: RAM / commit / cache / threads / handles / disk + every app categorized |
-| 8 | 🚀 **Startup Apps** | Turn startup apps on/off using the same switch Task Manager uses (fully reversible) |
-| 9 | ↩️ **Restore** | Restarts stopped services, restores your power plan and network settings |
-| H | 📜 **History** | Every Game Watcher session: game, minutes, RAM freed, lowest free RAM, avg/max ping |
+1. **Download** this folder (Code → Download ZIP) and unzip it anywhere.
+2. **Double-click `TurboMode.exe`.**
+3. Windows asks *"Do you want to allow this app to make changes?"*. Click **Yes**.
+   Turbo Mode needs admin rights to pause services and change the power plan.
+4. If you see *"Windows protected your PC"*, click **More info → Run anyway**.
+   This appears because the app is unsigned (built from source), not because it is harmful.
 
-Every boost prints a **BEFORE vs AFTER** table and an optimization score out of 100.
+Nothing to install: it uses the .NET Framework that already ships with Windows 10/11.
 
-### 🎯 Game Watcher in detail
-```
-Waiting for a game to launch...  21:04:11
->> DETECTED: VALORANT-Win64-Shipping - BOOSTING!
->> Timer resolution: 0.5 ms (smoother frame pacing)
-[00:42:17] VALORANT-Win64-Shipping | RAM 51% (7840 MB free) | CPU 38% | ping 24 ms | re-closed 6
+## 🎮 Gaming in 4 steps
 
-SESSION SUMMARY
-  Played: 42.3 min | RAM freed: 2310 MB | Ping avg/max: 26 / 61 ms | Apps re-closed: 6
-```
-- **0.5 ms timer resolution** while you play (the same technique as ISLC). Windows releases it automatically when Turbo Mode exits.
-- **Respects you.** If you open Discord or a browser mid-game (any app with a visible window), it and its helper processes are never closed again.
-- **Re-closes background relaunchers** (Slack tray, Edge WebView, updaters) every 15 s.
-
-### ⚙️ Under the hood
-- **Standby-list purge** via `NtSetSystemInformation` (same as RAMMap)
-- **Working-set trimming** with `EmptyWorkingSet`
-- **Service stop**: Windows Search, SysMain, telemetry, Xbox, Fax, Maps…
-- **Ultimate / High Performance** power plan
-- **Network**: DNS flush, multimedia network throttling disabled
-
-## 🛡️ Safety design
-- **Never touches Session 0.** Windows services, drivers, antivirus and anti-cheat (Vanguard) run there.
-- Hard protect-list for shell/UI processes, and it **protects its own process chain**.
-- Game Mode **lists what it will close and asks first**. The Recycle Bin is never emptied without an explicit "yes".
-- Doesn't delete Prefetch / icon / font caches (removing those makes Windows *slower*).
-- All state is saved in `%USERPROFILE%\.turbomode\`, so Restore always works. Every action is logged to `turbomode.log`.
-
-## 🚀 Usage
-
-Double-click **`TurboMode.exe`** (or `TURBO MODE.bat`) and accept the admin prompt.
-
-**One-click shortcuts / command line:**
-```powershell
-TurboMode.exe                    # menu
-TurboMode.exe -Mode Watch        # Game Watcher
-TurboMode.exe -Mode Monitor      # Live Monitor
-TurboMode.exe -Mode Game -Yes    # instant Game Mode, no prompts
-TurboMode.exe -Mode Clean        # Deep Clean
-TurboMode.exe -Mode Restore      # undo everything
-```
-Modes: `Menu | Game | Work | Clean | Watch | Monitor | Restore`. `-Yes` skips confirmations but never empties the Recycle Bin.
-
-## 🔧 Configuration
-
-`%USERPROFILE%\.turbomode\config.json` is created on first run (or press **C** in the menu):
-
-```json
-{
-  "GameProcesses": ["VALORANT-Win64-Shipping", "cs2", "FortniteClient-Win64-Shipping", "r5apex", "GTA5"],
-  "ExtraGameKeep": ["Discord"],
-  "ExtraWorkKeep": [],
-  "WatcherIntervalSec": 15,
-  "PingHost": "1.1.1.1"
-}
-```
-| Key | Meaning |
+| Step | What to do |
 |---|---|
-| `GameProcesses` | Process names (without `.exe`) treated as games |
-| `ExtraGameKeep` | Apps Game Mode / Watcher must never close |
-| `ExtraWorkKeep` | Extra apps Work Mode keeps |
-| `WatcherIntervalSec` | How often the watcher re-closes relaunched apps |
-| `PingHost` | Host used for the ping readout (e.g. your game server region) |
+| 1 | **Save your work** in other apps (they will be closed) |
+| 2 | Click **GAME WATCHER**. The status bar shows *"Waiting for a game to launch…"* |
+| 3 | **Launch your game.** Turbo Mode detects it and boosts automatically |
+| 4 | **Play, then quit.** Everything is restored on its own, and the session is saved in **Game History** |
 
-## 🔨 Build from source
+> Want Discord to stay open while gaming? **Settings → "Never close these apps"** → add `Discord` → **Save**.
+
+## 🧭 What every button does
+
+| Button | What happens | Closes apps? |
+|---|---|---|
+| ⚡ **Game Mode** | Instant boost: closes everything except your game and anti-cheat, cleans junk, max-performance power plan, high game priority | ✅ all except game |
+| ◎ **Game Watcher** | Same boost, but **automatic** when your game starts. Keeps background apps (Slack tray, Edge WebView, updaters) from sneaking back. Apps **you** open mid-game are left alone. Auto-restores when the game closes. | ✅ when game starts |
+| ⚒ **Work Mode** | Closes games, media players and bloat. Keeps your browser, IDE, Slack, Teams and Docker | only games and bloat |
+| ♻ **Deep Clean** | Deletes temp files, browser and Windows caches, crash dumps and shader cache. Optional: npm/pip/yarn/NuGet caches | ❌ never |
+| ↺ **Restore** | Undo every change: restarts paused services, original power plan, network settings | ❌ |
+| ⌨ **Advanced** | Opens the classic console with **Custom Mode** (pick exactly which apps to close, save profiles) | your choice |
+
+**Checkboxes under the buttons**
+- *Also clear developer caches*: frees gigabytes if you code (packages re-download when needed)
+- *Also empty the Recycle Bin*: **off by default**, because emptied files cannot be recovered
+
+## 📑 The other tabs
+
+| Tab | Use it to… |
+|---|---|
+| **Dashboard** | Live CPU, memory, ping and disk gauges + the apps using the most RAM |
+| **Startup Apps** | Untick apps you don't need at boot → Windows starts faster. Tick again to undo (same switch as Task Manager) |
+| **Game History** | See every Game Watcher session: game, minutes, RAM freed, lowest free RAM, average/max ping |
+| **Settings** | Add your games, apps that must never close, your ping server, and the re-close interval |
+| **Help & Guide** | All of these instructions inside the app |
+
+<p align="center">
+  <img src="docs/startup.png" width="49%" alt="Startup apps">
+  <img src="docs/help.png" width="49%" alt="Built-in help">
+</p>
+
+### Adding a game
+1. Start the game and open **Task Manager → Details**
+2. Find the game's process, e.g. `eldenring.exe`
+3. In **Settings → Games to boost**, add `eldenring` (without `.exe`) → **Save**
+
+Already included: Valorant, CS2, Fortnite, Apex, GTA V, Rocket League, League of Legends, Overwatch, Elden Ring, Cyberpunk 2077, Battlefield 2042.
+
+## 🛡️ Is it safe?
+
+- **Only your own apps are closed.** Windows services, drivers, antivirus and anti-cheat are never touched.
+- **Always confirms** before closing apps, and lists what's affected.
+- **Everything is reversible.** Use **Restore** for services, power plan and network, and re-tick anything in Startup Apps.
+- **No slowdown tricks.** It deliberately does *not* delete Prefetch / icon / font caches (that makes Windows slower).
+- **Full log** of every action: `%USERPROFILE%\.turbomode\turbomode.log`
+
+## ❓ Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| "Windows protected your PC" | **More info → Run anyway** (unsigned app) |
+| "Anti-cheat blocked priority change" | Normal for Valorant and others. The rest of the boost still works |
+| My game isn't detected | Add its process name in **Settings** (see *Adding a game*) |
+| Something feels off after boosting | Click **Restore** |
+| The app shows an error | Details are saved in `%USERPROFILE%\.turbomode\crash.log` |
+
+---
+
+## 🛠️ For developers
+
+### How it's built
+```
+TurboMode.exe          Desktop app (C# WinForms). Live gauges, buttons, startup manager, history, settings
+   └── runs ──►  TurboMode.ps1   The engine: process control, cleanup, services, power plan, watcher
+TurboMode-Console.exe  Classic console menu (same engine, includes Custom Mode)
+```
+The app streams the engine's output into its log panel. The engine is embedded in both executables, so either one works on its own.
+
+### Command line (engine)
+```powershell
+TurboMode-Console.exe                      # console menu
+TurboMode-Console.exe -Mode Watch          # Game Watcher
+TurboMode-Console.exe -Mode Game -Yes      # instant Game Mode, no prompts
+TurboMode.exe --watch                      # desktop app, start watching immediately
+```
+Engine modes: `Menu | Game | Work | Clean | Watch | Monitor | Restore`. Flags: `-Yes`, `-NoDevCaches`, `-EmptyRecycleBin`.
+
+### Build
 ```powershell
 $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-& $csc /nologo /target:exe /out:TurboMode.exe /win32manifest:app.manifest /win32icon:turbo.ico /resource:TurboMode.ps1,TurboMode.ps1 TurboMode.cs
-& $csc /nologo /target:library /out:KernelMemOptimizer.dll KernelMemOptimizer.cs
+& $csc -target:winexe -out:TurboMode.exe -win32manifest:app.manifest -win32icon:turbo.ico `
+  -resource:TurboMode.ps1,TurboMode.ps1 -r:System.Windows.Forms.dll -r:System.Drawing.dll `
+  -r:System.Web.Extensions.dll -r:Microsoft.VisualBasic.dll -r:System.Core.dll TurboModeApp.cs
+& $csc -target:exe -out:TurboMode-Console.exe -win32manifest:app.manifest -win32icon:turbo.ico `
+  -resource:TurboMode.ps1,TurboMode.ps1 TurboMode.cs
+& $csc -target:library -out:KernelMemOptimizer.dll KernelMemOptimizer.cs
 ```
-The `.exe` is a small C# launcher: it elevates, purges standby memory, forwards arguments, and runs the embedded `TurboMode.ps1`. It still works if you copy the exe alone.
 
-## 📁 Files
-```
-TurboMode.ps1            The optimizer (menu, modes, watcher, monitor, startup manager)
-TurboMode.cs             Native launcher (UAC + standby purge + embedded script + arg forwarding)
-KernelMemOptimizer.cs    Standby-list purge helper DLL
-turbo.ico                App icon (16-256 px)
-app.manifest             requireAdministrator manifest
-TURBO MODE.bat           Double-click launcher
-```
+### Files
+| File | Purpose |
+|---|---|
+| `TurboModeApp.cs` | Desktop app (UI, live stats, startup manager, history, settings, help) |
+| `TurboMode.ps1` | Optimization engine |
+| `TurboMode.cs` | Console launcher (elevation, standby purge, arg forwarding) |
+| `KernelMemOptimizer.cs` | Standby-list purge helper |
+| `turbo.ico`, `app.manifest` | Icon (16-256 px) and admin manifest |
+
+User data lives in `%USERPROFILE%\.turbomode\`: `config.json`, `history.csv`, `turbomode.log`.
 
 ## 📝 Changelog
 
 **v5.0**
-- ✨ **Game Watcher**: auto-boost on game launch, guard while playing, auto-restore on exit
-- ✨ **0.5 ms timer resolution** during game sessions
-- ✨ **Live Monitor**: real-time CPU/RAM/ping dashboard
-- ✨ **Startup Apps manager** (Task-Manager-compatible on/off)
-- ✨ **Dev cache cleanup**: npm / pip / yarn / pnpm / NuGet / Go
-- ✨ **Session history** (`history.csv`) + **config.json** + **command-line modes**
-- ✨ Works for any game, not just Valorant; new app icon
+- 🖥️ **New desktop app**: dark UI, live gauges, one-click actions, startup manager, game history, settings and built-in help. High-DPI aware.
+- 🎯 **Game Watcher**: auto-boost on launch, guard while playing, auto-restore on exit, 0.5 ms timer resolution, ping tracking, session history
+- 🧹 Developer cache cleanup · ⚙️ config file · ⌨️ command-line modes · new icon
 
 **v4.0**
-- 🐛 Fixed crash when killing processes (`$pid` is read-only in PowerShell)
-- 🐛 Fixed error flood on every snapshot (thread counting)
-- 🐛 Restore works after cleanup; accurate kill count
-- ✨ Session-based targeting, kill preview, opt-in Recycle Bin, activity log
+- 🐛 Fixed crash when closing apps, the error flood on every stats screen, and Restore after cleanup
+- ✨ Session-safe targeting, kill preview, opt-in Recycle Bin, activity log
 
 ## ⚠️ Disclaimer
-Closing apps discards unsaved work, so save before Game Mode. Use at your own risk.
+Closing apps discards their unsaved work, so save first. Provided as-is; use at your own risk.

@@ -8,7 +8,9 @@
 param(
     [ValidateSet("Menu", "Game", "Work", "Clean", "Watch", "Monitor", "Restore")]
     [string]$Mode = "Menu",
-    [switch]$Yes
+    [switch]$Yes,
+    [switch]$NoDevCaches,
+    [switch]$EmptyRecycleBin
 )
 
 # Self-elevate to admin if not already
@@ -17,6 +19,8 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     if ($exe) {
         $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$exe`" -Mode $Mode"
         if ($Yes) { $argList += " -Yes" }
+        if ($NoDevCaches) { $argList += " -NoDevCaches" }
+        if ($EmptyRecycleBin) { $argList += " -EmptyRecycleBin" }
         Start-Process powershell -Verb RunAs -ArgumentList $argList
     } else {
         Write-Host "  ERROR: Please run as Administrator!" -ForegroundColor Red
@@ -25,7 +29,10 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
-$Host.UI.RawUI.WindowTitle = "TURBO MODE v5.0"
+try { $Host.UI.RawUI.WindowTitle = "TURBO MODE v5.0" } catch {}
+# True when the desktop app runs us in the background (output goes to its log window)
+$Headless = $false
+try { $Headless = [Console]::IsOutputRedirected } catch {}
 
 $TurboDir = "$env:USERPROFILE\.turbomode"
 if (-not (Test-Path $TurboDir)) { New-Item -Path $TurboDir -ItemType Directory -Force | Out-Null }
@@ -117,6 +124,9 @@ function Confirm-Action {
 }
 
 function Test-QuitKey {
+    # The desktop app asks us to stop by dropping a flag file
+    $flag = "$TurboDir\stop.flag"
+    if (Test-Path $flag) { Remove-Item $flag -Force -ErrorAction SilentlyContinue; return $true }
     try {
         while ([Console]::KeyAvailable) {
             $k = [Console]::ReadKey($true)
@@ -456,6 +466,7 @@ function Show-Comparison {
 #  BANNER
 # ============================================================
 function Show-Banner {
+    if ($Headless) { return }
     Clear-Host
     Write-Host ""
     Write-Host "  +=========================================================+" -ForegroundColor Red
@@ -520,7 +531,7 @@ function Clean-TempFiles {
 
     # Recycle Bin is permanent deletion - always ask
     # -Yes never empties the bin; it must be an explicit choice
-    if (Confirm-Action "Also empty the Recycle Bin?" -DefaultNo) {
+    if ($EmptyRecycleBin -or (Confirm-Action "Also empty the Recycle Bin?" -DefaultNo)) {
         try {
             Clear-RecycleBin -Force -ErrorAction SilentlyContinue | Out-Null
             Write-Host "    [DEL] Recycle Bin emptied" -ForegroundColor DarkYellow
@@ -1064,6 +1075,7 @@ function Start-DeepClean {
 #  DEVELOPER CACHES (safe to delete - tools re-download on demand)
 # ============================================================
 function Clean-DevCaches {
+    if ($NoDevCaches) { return }
     $caches = @(
         @{ Name = "npm cache";   Path = "$env:LOCALAPPDATA\npm-cache" },
         @{ Name = "pip cache";   Path = "$env:LOCALAPPDATA\pip\Cache" },
