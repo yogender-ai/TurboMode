@@ -97,11 +97,22 @@ namespace TurboModeApp
             catch { }
         }
 
+        // Re-quote args so "-Mode Watch -Yes" survives elevation and the PowerShell hop
+        private static string JoinArgs(string[] args)
+        {
+            string result = "";
+            foreach (string a in args)
+            {
+                result += " \"" + a.Replace("\"", "\\\"") + "\"";
+            }
+            return result;
+        }
+
         public static int Main(string[] args)
         {
             try
             {
-                Console.Title = "TURBO MODE v4.0 - Ultimate System Optimizer";
+                Console.Title = "TURBO MODE v5.0 - Ultimate System Optimizer";
 
                 // Enable VT100 colors if available
                 try
@@ -121,6 +132,7 @@ namespace TurboModeApp
                     ProcessStartInfo elevateInfo = new ProcessStartInfo
                     {
                         FileName = Assembly.GetExecutingAssembly().Location,
+                        Arguments = JoinArgs(args).Trim(),
                         UseShellExecute = true,
                         Verb = "runas"
                     };
@@ -191,7 +203,7 @@ namespace TurboModeApp
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = psExe,
-                    Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + scriptPath + "\"",
+                    Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + scriptPath + "\"" + JoinArgs(args),
                     UseShellExecute = false
                 };
 

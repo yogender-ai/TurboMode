@@ -1,13 +1,23 @@
 # ============================================================
-#  TURBO MODE v4.0 - Ultimate System Optimizer
-#  Real stats | Temp cleanup | Kernel-level | Before/After
+#  TURBO MODE v5.0 - Ultimate System Optimizer
+#  Game Watcher | Live Monitor | Startup Manager | Before/After
 # ============================================================
+#  Usage:  TurboMode.ps1 [-Mode Menu|Game|Work|Clean|Watch|Monitor|Restore] [-Yes]
+#          -Yes skips confirmations (for one-click shortcuts)
+# ============================================================
+param(
+    [ValidateSet("Menu", "Game", "Work", "Clean", "Watch", "Monitor", "Restore")]
+    [string]$Mode = "Menu",
+    [switch]$Yes
+)
 
 # Self-elevate to admin if not already
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $exe = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Path }
     if ($exe) {
-        Start-Process powershell -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$exe`""
+        $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$exe`" -Mode $Mode"
+        if ($Yes) { $argList += " -Yes" }
+        Start-Process powershell -Verb RunAs -ArgumentList $argList
     } else {
         Write-Host "  ERROR: Please run as Administrator!" -ForegroundColor Red
         Read-Host "  Press Enter to exit"
@@ -15,7 +25,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
-$Host.UI.RawUI.WindowTitle = "TURBO MODE v4.0"
+$Host.UI.RawUI.WindowTitle = "TURBO MODE v5.0"
 
 $TurboDir = "$env:USERPROFILE\.turbomode"
 if (-not (Test-Path $TurboDir)) { New-Item -Path $TurboDir -ItemType Directory -Force | Out-Null }
@@ -68,6 +78,127 @@ $WorkModeKeep = @(
     "Notion", "Obsidian",
     "getscreen", "Getscreen"
 )
+
+# ---- USER CONFIG ($TurboDir\config.json, created on first run) ----
+$ConfigFile = "$TurboDir\config.json"
+$DefaultConfig = [ordered]@{
+    GameProcesses      = @("VALORANT-Win64-Shipping", "cs2", "FortniteClient-Win64-Shipping",
+                           "r5apex", "GTA5", "RocketLeague", "League of Legends",
+                           "Overwatch", "eldenring", "Cyberpunk2077", "bf2042")
+    ExtraGameKeep      = @()
+    ExtraWorkKeep      = @()
+    WatcherIntervalSec = 15
+    PingHost           = "1.1.1.1"
+}
+if (-not (Test-Path $ConfigFile)) {
+    $DefaultConfig | ConvertTo-Json | Out-File $ConfigFile -Encoding UTF8 -Force
+}
+$Config = $DefaultConfig
+try {
+    $loaded = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+    foreach ($key in @($DefaultConfig.Keys)) {
+        if ($null -ne $loaded.$key) { $Config[$key] = $loaded.$key }
+    }
+} catch {
+    Write-Host "  [!] config.json is invalid - using defaults" -ForegroundColor Yellow
+}
+$GameProcesses = @($Config.GameProcesses)
+$GameModeKeep += $GameProcesses + @($Config.ExtraGameKeep)
+$WorkModeKeep += @($Config.ExtraWorkKeep)
+
+# ---- SMALL HELPERS ----
+function Confirm-Action {
+    param([string]$Prompt, [switch]$DefaultNo)
+    if ($Yes) { return -not $DefaultNo }
+    $hint = if ($DefaultNo) { "(y/N)" } else { "(Y/n)" }
+    $ans = Read-Host "    $Prompt $hint"
+    if ($DefaultNo) { return $ans -match '^(y|yes)$' }
+    return $ans -notmatch '^(n|no)$'
+}
+
+function Test-QuitKey {
+    try {
+        while ([Console]::KeyAvailable) {
+            $k = [Console]::ReadKey($true)
+            if ($k.Key -eq 'Q' -or $k.Key -eq 'Escape') { return $true }
+        }
+    } catch {}
+    return $false
+}
+
+function Get-FolderSizeMB {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return 0 }
+    $sum = (Get-ChildItem -Path $Path -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+    return [math]::Round(($sum / 1MB), 1)
+}
+
+function Get-Bar {
+    param([double]$Pct, [int]$Width = 30)
+    $Pct = [math]::Max(0, [math]::Min(100, $Pct))
+    $n = [int][math]::Round($Pct / 100 * $Width)
+    return ('#' * $n).PadRight($Width, '.')
+}
+
+function Get-QuickStats {
+    $os = Get-CimInstance Win32_OperatingSystem
+    $cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction SilentlyContinue).PercentProcessorTime
+    $total = [math]::Round($os.TotalVisibleMemorySize / 1KB)
+    $free = [math]::Round($os.FreePhysicalMemory / 1KB)
+    return [PSCustomObject]@{
+        TotalMB = $total; FreeMB = $free; UsedPct = [math]::Round((($total - $free) / $total) * 100, 1)
+        CPU = [int]$cpu
+    }
+}
+
+function Get-RunningGame {
+    Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { $GameProcesses -contains $_.ProcessName } |
+        Select-Object -First 1
+}
+
+function Set-GamePriority {
+    param($Game)
+    if (-not $Game) { return $false }
+    try {
+        $Game.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+        Write-Host "    >> $($Game.ProcessName) = HIGH priority!" -ForegroundColor Green
+        Write-Log "Priority HIGH: $($Game.ProcessName)"
+        return $true
+    } catch {
+        Write-Host "    ~ $($Game.ProcessName): anti-cheat blocked priority change (normal)" -ForegroundColor DarkGray
+        return $false
+    }
+}
+
+$PingSender = New-Object System.Net.NetworkInformation.Ping
+function Get-PingMs {
+    try {
+        $r = $PingSender.Send([string]$Config.PingHost, 500)
+        if ($r.Status -eq 'Success') { return [int]$r.RoundtripTime }
+    } catch {}
+    return -1
+}
+
+# NtSetTimerResolution: units of 100ns, 5000 = 0.5 ms. Windows drops the request
+# automatically when this process exits, so it can never get "stuck".
+function Set-TimerResolution {
+    param([switch]$Enable)
+    if (-not ("TurboTimer" -as [type])) {
+        try {
+            Add-Type -ErrorAction Stop -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class TurboTimer { [DllImport("ntdll.dll")] public static extern int NtSetTimerResolution(uint DesiredResolution, bool SetResolution, out uint CurrentResolution); }'
+        } catch { return $false }
+    }
+    $current = [uint32]0
+    $status = [TurboTimer]::NtSetTimerResolution(5000, [bool]$Enable, [ref]$current)
+    return ($status -eq 0)
+}
+
+$HistoryFile = "$TurboDir\history.csv"
+function Save-SessionHistory {
+    param($Row)
+    try { $Row | Export-Csv -Path $HistoryFile -Append -NoTypeInformation -Force } catch {}
+}
 
 # Services to stop
 $ServicesToStop = @(
@@ -329,7 +460,7 @@ function Show-Banner {
     Write-Host ""
     Write-Host "  +=========================================================+" -ForegroundColor Red
     Write-Host "  |                                                         |" -ForegroundColor Red
-    Write-Host "  |        >>> T U R B O   M O D E   v 4 . 0 <<<            |" -ForegroundColor Red
+    Write-Host "  |        >>> T U R B O   M O D E   v 5 . 0 <<<            |" -ForegroundColor Red
     Write-Host "  |        Ultimate System Optimizer                        |" -ForegroundColor Red
     Write-Host "  |                                                         |" -ForegroundColor Red
     Write-Host "  +=========================================================+" -ForegroundColor Red
@@ -388,8 +519,8 @@ function Clean-TempFiles {
     }
 
     # Recycle Bin is permanent deletion - always ask
-    $rb = Read-Host "    Also empty the Recycle Bin? (y/N)"
-    if ($rb -match '^(y|yes)$') {
+    # -Yes never empties the bin; it must be an explicit choice
+    if (Confirm-Action "Also empty the Recycle Bin?" -DefaultNo) {
         try {
             Clear-RecycleBin -Force -ErrorAction SilentlyContinue | Out-Null
             Write-Host "    [DEL] Recycle Bin emptied" -ForegroundColor DarkYellow
@@ -777,8 +908,7 @@ function Start-GameMode {
     }
     $killMB = ($toKill | ForEach-Object { $procs[$_].MemoryMB } | Measure-Object -Sum).Sum
     Write-Host ("    Will close {0} apps (~{1} MB): {2}" -f $toKill.Count, $killMB, (($toKill | ForEach-Object { $procs[$_].Name }) -join ", ")) -ForegroundColor DarkGray
-    $confirm = Read-Host "    Save your work! Continue? (Y/n)"
-    if ($confirm -match '^(n|no)$') { Write-Host "  Cancelled." -ForegroundColor DarkGray; return }
+    if (-not (Confirm-Action "Save your work! Continue?")) { Write-Host "  Cancelled." -ForegroundColor DarkGray; return }
     Kill-SelectedProcesses -Processes $procs -Indices $toKill
 
     Write-Host "  [2/4] CLEANING TEMP/JUNK..." -ForegroundColor Yellow
@@ -787,15 +917,12 @@ function Start-GameMode {
     Write-Host "  [3/4] SYSTEM OPTIMIZATIONS..." -ForegroundColor Yellow
     Run-SystemOptimizations
 
-    Write-Host "  [4/4] VALORANT PRIORITY..." -ForegroundColor Yellow
-    $val = Get-Process -Name "VALORANT-Win64-Shipping" -ErrorAction SilentlyContinue
-    if ($val) {
-        try {
-            $val.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-            Write-Host "    >> Valorant = HIGH priority!" -ForegroundColor Green
-        } catch { Write-Host "    ~ Anti-cheat blocked" -ForegroundColor DarkGray }
+    Write-Host "  [4/4] GAME PRIORITY..." -ForegroundColor Yellow
+    $game = Get-RunningGame
+    if ($game) {
+        Set-GamePriority $game | Out-Null
     } else {
-        Write-Host "    >> Launch Valorant now!" -ForegroundColor Cyan
+        Write-Host "    >> Launch your game now! (tip: GAME WATCHER boosts it automatically)" -ForegroundColor Cyan
     }
 
     $sw.Stop()
@@ -922,6 +1049,7 @@ function Start-DeepClean {
     Write-Host ""
 
     Clean-TempFiles
+    Clean-DevCaches
     Run-SystemOptimizations
 
     Write-Host "  Taking AFTER snapshot..." -ForegroundColor DarkGray
@@ -929,6 +1057,344 @@ function Start-DeepClean {
     $after = Get-SystemSnapshot
 
     Show-Comparison -Before $before -After $after
+    Write-Host ""
+}
+
+# ============================================================
+#  DEVELOPER CACHES (safe to delete - tools re-download on demand)
+# ============================================================
+function Clean-DevCaches {
+    $caches = @(
+        @{ Name = "npm cache";   Path = "$env:LOCALAPPDATA\npm-cache" },
+        @{ Name = "pip cache";   Path = "$env:LOCALAPPDATA\pip\Cache" },
+        @{ Name = "Yarn cache";  Path = "$env:LOCALAPPDATA\Yarn\Cache" },
+        @{ Name = "pnpm store";  Path = "$env:LOCALAPPDATA\pnpm\store" },
+        @{ Name = "NuGet http";  Path = "$env:LOCALAPPDATA\NuGet\v3-cache" },
+        @{ Name = "Go build";    Path = "$env:LOCALAPPDATA\go-build" }
+    )
+    $found = @()
+    foreach ($c in $caches) {
+        $mb = Get-FolderSizeMB $c.Path
+        if ($mb -gt 1) { $found += [PSCustomObject]@{ Name = $c.Name; Path = $c.Path; MB = $mb } }
+    }
+    if ($found.Count -eq 0) { return }
+
+    $total = [math]::Round(($found | Measure-Object MB -Sum).Sum)
+    Write-Host "  [DEV] DEVELOPER CACHES FOUND (~$total MB):" -ForegroundColor Yellow
+    foreach ($f in $found) { Write-Host ("    {0,-12} {1,8} MB" -f $f.Name, $f.MB) -ForegroundColor DarkGray }
+    if (-not (Confirm-Action "Clear these caches? (packages re-download when needed)")) { Write-Host ""; return }
+
+    foreach ($f in $found) {
+        Get-ChildItem -Path $f.Path -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "    [DEL] $($f.Name): $($f.MB) MB" -ForegroundColor DarkYellow
+    }
+    Write-Log "Dev caches cleared: ~$total MB"
+    Write-Host ""
+}
+
+# ============================================================
+#  GAME WATCHER - auto boost when a game starts, auto restore when it exits
+# ============================================================
+function Start-GameWatcher {
+    Show-Banner
+    Write-Host "  >>> GAME WATCHER <<<" -ForegroundColor Red
+    Write-Host "  Watching for: $($GameProcesses -join ', ')" -ForegroundColor DarkGray
+    Write-Host "  (edit the list in $ConfigFile)" -ForegroundColor DarkGray
+    Write-Host "  Press Q to stop watching." -ForegroundColor DarkGray
+    Write-Host ""
+
+    $game = $null
+    while (-not $game) {
+        if (Test-QuitKey) { Write-Host "`n  Watcher stopped." -ForegroundColor DarkGray; return }
+        $game = Get-RunningGame
+        if (-not $game) {
+            Write-Host -NoNewline ("`r  Waiting for a game to launch...  {0}   " -f (Get-Date -Format "HH:mm:ss")) -ForegroundColor Cyan
+            Start-Sleep -Seconds 2
+        }
+    }
+
+    Write-Host ""
+    Write-Host ""
+    Write-Host "  >> DETECTED: $($game.ProcessName) - BOOSTING!" -ForegroundColor Green
+    Write-Log "Watcher detected $($game.ProcessName)"
+    $before = Get-QuickStats
+
+    $procs = @(Get-KernelProcessList)
+    $toKill = @()
+    for ($i = 0; $i -lt $procs.Count; $i++) {
+        if ($GameModeKeep -notcontains $procs[$i].Name) { $toKill += $i }
+    }
+    $killedNames = @($toKill | ForEach-Object { $procs[$_].Name })
+    Kill-SelectedProcesses -Processes $procs -Indices $toKill
+    Run-SystemOptimizations
+    Set-GamePriority $game | Out-Null
+
+    $after = Get-QuickStats
+    $freedMB = [math]::Max(0, $after.FreeMB - $before.FreeMB)
+    Write-Host ("  >> Freed {0} MB RAM. Keeping background apps closed while you play." -f $freedMB) -ForegroundColor Green
+    Write-Host "  Press Q to stop guarding (settings restore automatically when the game closes)." -ForegroundColor DarkGray
+    Write-Host ""
+
+    # 0.5 ms timer resolution for smoother frame pacing (released when we stop)
+    $timerSet = Set-TimerResolution -Enable
+    if ($timerSet) { Write-Host "  >> Timer resolution: 0.5 ms (smoother frame pacing)" -ForegroundColor Green }
+
+    $start = Get-Date
+    $reClosed = 0
+    $userOpened = @{}            # apps YOU opened mid-game - never re-closed
+    $pings = New-Object System.Collections.ArrayList
+    $minFree = [int]::MaxValue
+    $nextSweep = (Get-Date).AddSeconds([int]$Config.WatcherIntervalSec)
+    try {
+        while (Get-Process -Id $game.Id -ErrorAction SilentlyContinue) {
+            if (Test-QuitKey) { break }
+            if ((Get-Date) -ge $nextSweep) {
+                $running = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $MySessionId }
+                # A visible window means you opened it on purpose (e.g. Discord, a guide in Chrome) - respect that
+                foreach ($p in $running) {
+                    if ($p.MainWindowHandle -ne [IntPtr]::Zero -and $killedNames -contains $p.ProcessName -and -not $userOpened[$p.ProcessName]) {
+                        $userOpened[$p.ProcessName] = $true
+                        Write-Log "User opened $($p.ProcessName) mid-game - leaving it alone"
+                    }
+                }
+                # Never touch helpers of apps you opened (e.g. Discord's msedgewebview2 children)
+                $parentOf = @{}
+                Get-CimInstance Win32_Process -Filter "SessionId=$MySessionId" -ErrorAction SilentlyContinue |
+                    ForEach-Object { $parentOf[[int]$_.ProcessId] = [int]$_.ParentProcessId }
+                $userPids = @{}
+                $running | Where-Object { $userOpened[$_.ProcessName] -or $GameModeKeep -contains $_.ProcessName } |
+                    ForEach-Object { $userPids[$_.Id] = $true }
+                $isUserChild = {
+                    param($procId)
+                    $cur = $procId
+                    for ($d = 0; $d -lt 4; $d++) {
+                        $par = $parentOf[$cur]
+                        if (-not $par) { return $false }
+                        if ($userPids[$par]) { return $true }
+                        $cur = $par
+                    }
+                    return $false
+                }
+                # Background relaunchers (Slack tray, Edge WebView, updaters) get closed again
+                $running | Where-Object { $killedNames -contains $_.ProcessName -and -not $userOpened[$_.ProcessName] -and -not (& $isUserChild $_.Id) } |
+                    ForEach-Object {
+                        try { Stop-Process -Id $_.Id -Force -ErrorAction Stop; $reClosed++; Write-Log "Re-closed $($_.ProcessName)" } catch {}
+                    }
+                $nextSweep = (Get-Date).AddSeconds([int]$Config.WatcherIntervalSec)
+            }
+            $q = Get-QuickStats
+            if ($q.FreeMB -lt $minFree) { $minFree = $q.FreeMB }
+            $ping = Get-PingMs
+            if ($ping -ge 0) { [void]$pings.Add($ping) }
+            $pingStr = if ($ping -ge 0) { "$ping ms" } else { "--" }
+            $played = (Get-Date) - $start
+            Write-Host -NoNewline ("`r  [{0:hh\:mm\:ss}] {1} | RAM {2}% ({3} MB free) | CPU {4}% | ping {5} | re-closed {6}    " -f $played, $game.ProcessName, $q.UsedPct, $q.FreeMB, $q.CPU, $pingStr, $reClosed) -ForegroundColor Cyan
+            Start-Sleep -Seconds 2
+        }
+    } finally {
+        if ($timerSet) { Set-TimerResolution | Out-Null }
+    }
+
+    $mins = [math]::Round(((Get-Date) - $start).TotalMinutes, 1)
+    $avgPing = if ($pings.Count) { [math]::Round(($pings | Measure-Object -Average).Average) } else { -1 }
+    $maxPing = if ($pings.Count) { ($pings | Measure-Object -Maximum).Maximum } else { -1 }
+
+    Write-Host ""
+    Write-Host ""
+    Write-Host "  SESSION SUMMARY" -ForegroundColor Yellow
+    Write-Host "  $('-' * 40)" -ForegroundColor DarkGray
+    Write-Host "    Game:            $($game.ProcessName)"
+    Write-Host "    Played:          $mins min"
+    Write-Host "    RAM freed:       $freedMB MB at start"
+    Write-Host "    Lowest free RAM: $minFree MB"
+    if ($avgPing -ge 0) { Write-Host "    Ping avg / max:  $avgPing / $maxPing ms" }
+    Write-Host "    Apps re-closed:  $reClosed"
+    if ($userOpened.Count) { Write-Host "    Left open (you): $($userOpened.Keys -join ', ')" }
+    Write-Host ""
+
+    Save-SessionHistory ([PSCustomObject]@{
+        Date = (Get-Date -Format "yyyy-MM-dd HH:mm"); Game = $game.ProcessName; Minutes = $mins
+        FreedMB = $freedMB; MinFreeMB = $minFree; AvgPing = $avgPing; MaxPing = $maxPing; ReClosed = $reClosed
+    })
+    Write-Log "Watcher session ended after $mins min, re-closed $reClosed apps"
+
+    Write-Host "  Restoring normal mode..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 1
+    Restore-Normal
+}
+
+function Show-SessionHistory {
+    Show-Banner
+    Write-Host "  GAME SESSION HISTORY" -ForegroundColor Cyan
+    Write-Host "  $('-' * 78)" -ForegroundColor DarkGray
+    if (-not (Test-Path $HistoryFile)) { Write-Host "  No sessions yet - use GAME WATCHER to record them." -ForegroundColor DarkGray; return }
+    $rows = @(Import-Csv $HistoryFile | Select-Object -Last 15)
+    Write-Host ("  {0,-17} {1,-24} {2,6} {3,8} {4,9} {5,8}" -f "DATE", "GAME", "MIN", "FREED", "MIN FREE", "PING") -ForegroundColor White
+    foreach ($r in $rows) {
+        $pingTxt = if ([int]$r.AvgPing -ge 0) { "$($r.AvgPing)ms" } else { "--" }
+        $g = $r.Game.Substring(0, [math]::Min(24, $r.Game.Length))
+        Write-Host ("  {0,-17} {1,-24} {2,6} {3,6}MB {4,7}MB {5,8}" -f $r.Date, $g, $r.Minutes, $r.FreedMB, $r.MinFreeMB, $pingTxt)
+    }
+    Write-Host ""
+}
+
+# ============================================================
+#  LIVE MONITOR - real-time dashboard
+# ============================================================
+function Start-LiveMonitor {
+    $cores = [Environment]::ProcessorCount
+    Clear-Host
+    try { [Console]::CursorVisible = $false } catch {}
+    try {
+        while ($true) {
+            if (Test-QuitKey) { break }
+            $q = Get-QuickStats
+            $perf = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -notin @("_Total", "Idle") }
+            $topCpu = $perf | Group-Object { $_.Name -replace '#\d+$', '' } | ForEach-Object {
+                [PSCustomObject]@{
+                    Name = $_.Name
+                    CPU  = [math]::Round((($_.Group | Measure-Object PercentProcessorTime -Sum).Sum / $cores), 1)
+                    MB   = [math]::Round((($_.Group | Measure-Object WorkingSetPrivate -Sum).Sum / 1MB))
+                }
+            }
+            $byCpu = $topCpu | Sort-Object CPU -Descending | Select-Object -First 8
+            $byRam = $topCpu | Sort-Object MB -Descending | Select-Object -First 8
+
+            $w = 100
+            try { $w = [math]::Max(70, [Console]::WindowWidth - 1) } catch {}
+            $lines = @()
+            $lines += "  TURBO MODE - LIVE MONITOR            $(Get-Date -Format 'HH:mm:ss')   (Q = back)"
+            $lines += "  " + ('=' * 64)
+            $lines += ("  CPU  [{0}] {1,5}%" -f (Get-Bar $q.CPU), $q.CPU)
+            $lines += ("  RAM  [{0}] {1,5}%  {2} / {3} MB" -f (Get-Bar $q.UsedPct), $q.UsedPct, ($q.TotalMB - $q.FreeMB), $q.TotalMB)
+            $ping = Get-PingMs
+            $lines += ("  NET  ping {0} = {1}" -f $Config.PingHost, $(if ($ping -ge 0) { "$ping ms" } else { "timeout" }))
+            $lines += ""
+            $lines += ("  {0,-28} {1,7}      {2,-24} {3,8}" -f "TOP CPU", "%", "TOP RAM (private)", "MB")
+            $lines += "  " + ('-' * 64)
+            for ($i = 0; $i -lt 8; $i++) {
+                $c = $byCpu[$i]; $r = $byRam[$i]
+                $cn = if ($c) { $c.Name.Substring(0, [math]::Min(28, $c.Name.Length)) } else { "" }
+                $rn = if ($r) { $r.Name.Substring(0, [math]::Min(24, $r.Name.Length)) } else { "" }
+                $lines += ("  {0,-28} {1,7}      {2,-24} {3,8}" -f $cn, $(if ($c) { $c.CPU } else { "" }), $rn, $(if ($r) { $r.MB } else { "" }))
+            }
+            $game = Get-RunningGame
+            $lines += ""
+            if ($game) { $lines += "  GAME RUNNING: $($game.ProcessName)  (priority: $($game.PriorityClass))" }
+            else { $lines += "  No game running" }
+
+            # Redraw in place (no flicker); fall back to clearing if the host has no real console
+            try { [Console]::SetCursorPosition(0, 0) } catch { Clear-Host }
+            foreach ($l in $lines) { Write-Host ([string]$l).PadRight($w).Substring(0, $w) }
+            Start-Sleep -Seconds 2
+        }
+    } finally {
+        try { [Console]::CursorVisible = $true } catch {}
+    }
+}
+
+# ============================================================
+#  STARTUP APPS MANAGER - same on/off switch Task Manager uses (reversible)
+# ============================================================
+function Get-StartupEntries {
+    $approvedBase = "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved"
+    $sources = @(
+        @{ Hive = "HKCU"; Run = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run";             Approved = "HKCU:\$approvedBase\Run" },
+        @{ Hive = "HKLM"; Run = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run";             Approved = "HKLM:\$approvedBase\Run" },
+        @{ Hive = "HKLM"; Run = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"; Approved = "HKLM:\$approvedBase\Run32" }
+    )
+    $entries = @()
+    foreach ($s in $sources) {
+        $props = Get-ItemProperty -Path $s.Run -ErrorAction SilentlyContinue
+        if (-not $props) { continue }
+        foreach ($p in $props.PSObject.Properties) {
+            if ($p.Name -like "PS*") { continue }
+            $entries += [PSCustomObject]@{ Name = $p.Name; Command = [string]$p.Value; Approved = $s.Approved; Scope = $s.Hive }
+        }
+    }
+    $folders = @(
+        @{ Path = [Environment]::GetFolderPath("Startup");       Approved = "HKCU:\$approvedBase\StartupFolder"; Scope = "HKCU" },
+        @{ Path = [Environment]::GetFolderPath("CommonStartup"); Approved = "HKLM:\$approvedBase\StartupFolder"; Scope = "HKLM" }
+    )
+    foreach ($f in $folders) {
+        Get-ChildItem -Path $f.Path -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne "desktop.ini" } | ForEach-Object {
+            $entries += [PSCustomObject]@{ Name = $_.Name; Command = $_.FullName; Approved = $f.Approved; Scope = $f.Scope }
+        }
+    }
+    foreach ($e in $entries) {
+        $val = (Get-ItemProperty -Path $e.Approved -Name $e.Name -ErrorAction SilentlyContinue).($e.Name)
+        # First byte: 2/6 = enabled, 3/7 = disabled; missing = enabled
+        $enabled = $true
+        if ($val -and $val.Length -gt 0) { $enabled = ($val[0] % 2 -eq 0) }
+        $e | Add-Member -NotePropertyName Enabled -NotePropertyValue $enabled
+    }
+    return $entries
+}
+
+function Start-StartupManager {
+    while ($true) {
+        Show-Banner
+        Write-Host "  STARTUP APPS - fewer startup apps = faster boot" -ForegroundColor Cyan
+        Write-Host "  $('-' * 70)" -ForegroundColor DarkGray
+        $entries = @(Get-StartupEntries)
+        if ($entries.Count -eq 0) { Write-Host "  No startup apps found." -ForegroundColor DarkGray; Read-Host "  Enter to go back"; return }
+        for ($i = 0; $i -lt $entries.Count; $i++) {
+            $e = $entries[$i]
+            $state = if ($e.Enabled) { "[ON ]" } else { "[OFF]" }
+            $color = if ($e.Enabled) { "Green" } else { "DarkGray" }
+            $cmd = $e.Command
+            if ($cmd.Length -gt 38) { $cmd = $cmd.Substring(0, 35) + "..." }
+            Write-Host -NoNewline ("  {0,3} " -f ($i + 1))
+            Write-Host -NoNewline $state -ForegroundColor $color
+            Write-Host (" {0,-26} {1}" -f $e.Name.Substring(0, [math]::Min(26, $e.Name.Length)), $cmd) -ForegroundColor $color
+        }
+        Write-Host ""
+        Write-Host "  <number> toggle on/off    back  return to menu" -ForegroundColor DarkGray
+        $in = Read-Host "  >"
+        if ($in -match '^(back|b|q)$' -or [string]::IsNullOrWhiteSpace($in)) { return }
+        if ($in -match '^\d+$') {
+            $idx = [int]$in - 1
+            if ($idx -ge 0 -and $idx -lt $entries.Count) {
+                $e = $entries[$idx]
+                $first = if ($e.Enabled) { [byte]3 } else { [byte]2 }
+                $bytes = [byte[]]@($first, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                try {
+                    if (-not (Test-Path $e.Approved)) { New-Item -Path $e.Approved -Force | Out-Null }
+                    Set-ItemProperty -Path $e.Approved -Name $e.Name -Value $bytes -Type Binary -ErrorAction Stop
+                    $newState = if ($e.Enabled) { "DISABLED" } else { "ENABLED" }
+                    Write-Host "    >> $($e.Name) $newState at startup" -ForegroundColor Green
+                    Write-Log "Startup $newState : $($e.Name)"
+                } catch {
+                    Write-Host "    >> Could not change $($e.Name): $($_.Exception.Message)" -ForegroundColor Red
+                }
+                Start-Sleep -Milliseconds 900
+            }
+        }
+    }
+}
+
+# ============================================================
+#  SYSTEM VIEW
+# ============================================================
+function Show-SystemView {
+    Show-Banner
+    $snap = Get-SystemSnapshot
+    Show-Snapshot -Snap $snap -Label "FULL SYSTEM REPORT"
+
+    Write-Host "  RUNNING APPS (your session):" -ForegroundColor Cyan
+    Write-Host "  $('-' * 60)" -ForegroundColor DarkGray
+    foreach ($p in Get-KernelProcessList) {
+        $memColor = "Green"
+        if ($p.MemoryMB -gt 100) { $memColor = "Yellow" }
+        if ($p.MemoryMB -gt 300) { $memColor = "Red" }
+        $nameStr = $p.Name
+        if ($nameStr.Length -gt 28) { $nameStr = $nameStr.Substring(0, 25) + "..." }
+        $countStr = if ($p.Count -gt 1) { "$($p.Count)x" } else { "1" }
+        Write-Host -NoNewline ("    {0,-28} {1,4} " -f $nameStr, $countStr)
+        Write-Host -NoNewline ("{0,6} MB" -f $p.MemoryMB) -ForegroundColor $memColor
+        Write-Host "  $($p.Category)"
+    }
     Write-Host ""
 }
 
@@ -980,81 +1446,75 @@ function Restore-Normal {
 #  MAIN MENU
 # ============================================================
 function Show-Menu {
-    Show-Banner
+    while ($true) {
+        Show-Banner
 
-    $os = Get-CimInstance Win32_OperatingSystem
-    $totalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
-    $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
-    $usedPct = [math]::Round((($totalGB - $freeGB) / $totalGB) * 100)
-    $procCount = (Get-Process).Count
+        $q = Get-QuickStats
+        $ramColor = "Green"
+        if ($q.UsedPct -gt 60) { $ramColor = "Yellow" }
+        if ($q.UsedPct -gt 80) { $ramColor = "Red" }
 
-    $ramColor = "Green"
-    if ($usedPct -gt 60) { $ramColor = "Yellow" }
-    if ($usedPct -gt 80) { $ramColor = "Red" }
+        Write-Host -NoNewline "  RAM "
+        Write-Host -NoNewline ("[{0}] {1}% used, {2} MB free" -f (Get-Bar $q.UsedPct 20), $q.UsedPct, $q.FreeMB) -ForegroundColor $ramColor
+        Write-Host (" | CPU {0}% | Processes: {1}" -f $q.CPU, (Get-Process).Count)
+        $game = Get-RunningGame
+        if ($game) { Write-Host "  GAME RUNNING: $($game.ProcessName)" -ForegroundColor Green }
+        Write-Host ""
 
-    Write-Host -NoNewline "  RAM: "
-    Write-Host -NoNewline "${freeGB}GB free / ${totalGB}GB (${usedPct}% used)" -ForegroundColor $ramColor
-    Write-Host " | Processes: $procCount"
-    Write-Host ""
+        Write-Host "  SELECT MODE:" -ForegroundColor White
+        Write-Host ""
+        Write-Host "    [1] GAME MODE      Close EVERYTHING now for max FPS" -ForegroundColor Red
+        Write-Host "    [2] GAME WATCHER   Auto-boost when a game starts, auto-restore when it ends" -ForegroundColor Red
+        Write-Host "    [3] WORK MODE      Kill bloat, keep productivity apps" -ForegroundColor Green
+        Write-Host "    [4] CUSTOM MODE    YOU pick what lives and what dies" -ForegroundColor Magenta
+        Write-Host "    [5] DEEP CLEAN     Junk + dev caches + optimize (no kills)" -ForegroundColor Yellow
+        Write-Host "    [6] LIVE MONITOR   Real-time CPU/RAM dashboard" -ForegroundColor Cyan
+        Write-Host "    [7] SYSTEM VIEW    Full system stats + app list" -ForegroundColor Cyan
+        Write-Host "    [8] STARTUP APPS   Turn startup apps on/off (faster boot)" -ForegroundColor Cyan
+        Write-Host "    [9] RESTORE        Undo all optimizations" -ForegroundColor DarkYellow
+        Write-Host "    [H] HISTORY        Past game sessions (RAM, ping, time)" -ForegroundColor DarkGray
+        Write-Host "    [C] CONFIG         Edit games / keep lists" -ForegroundColor DarkGray
+        Write-Host "    [0] EXIT" -ForegroundColor DarkGray
+        Write-Host ""
+        $choice = (Read-Host "  Enter choice").Trim().ToUpper()
 
-    Write-Host "  SELECT MODE:" -ForegroundColor White
-    Write-Host ""
-    Write-Host "    [1] GAME MODE      Kill EVERYTHING for Valorant (max FPS)" -ForegroundColor Red
-    Write-Host "    [2] WORK MODE      Kill bloat, keep productivity apps" -ForegroundColor Green
-    Write-Host "    [3] CUSTOM MODE    YOU pick what lives and what dies" -ForegroundColor Magenta
-    Write-Host "    [4] DEEP CLEAN     Clean temp/junk files + optimize (no kills)" -ForegroundColor Yellow
-    Write-Host "    [5] SYSTEM VIEW    Full system stats + process list" -ForegroundColor Cyan
-    Write-Host "    [6] RESTORE        Undo all optimizations" -ForegroundColor DarkYellow
-    Write-Host "    [7] EXIT" -ForegroundColor DarkGray
-    Write-Host ""
-    $choice = Read-Host "  Enter (1-7)"
-
-    switch ($choice) {
-        "1" { Start-GameMode }
-        "2" { Start-WorkMode }
-        "3" { Start-CustomMode }
-        "4" { Start-DeepClean }
-        "5" {
-            Show-Banner
-            $snap = Get-SystemSnapshot
-            Show-Snapshot -Snap $snap -Label "FULL SYSTEM REPORT"
-
-            Write-Host "  RUNNING PROCESSES (Kernel Level):" -ForegroundColor Cyan
-            Write-Host "  $('-' * 60)" -ForegroundColor DarkGray
-            $procs = Get-KernelProcessList
-            foreach ($p in $procs) {
-                $memColor = "Green"
-                if ($p.MemoryMB -gt 100) { $memColor = "Yellow" }
-                if ($p.MemoryMB -gt 300) { $memColor = "Red" }
-                $nameStr = $p.Name
-                if ($nameStr.Length -gt 28) { $nameStr = $nameStr.Substring(0, 25) + "..." }
-                $countStr = if ($p.Count -gt 1) { "$($p.Count)x" } else { "1" }
-                Write-Host -NoNewline ("    {0,-28} {1,4} " -f $nameStr, $countStr)
-                Write-Host -NoNewline ("{0,6} MB" -f $p.MemoryMB) -ForegroundColor $memColor
-                Write-Host "  $($p.Category)"
+        $pause = $true
+        switch ($choice) {
+            "1" { Start-GameMode }
+            "2" { Start-GameWatcher }
+            "3" { Start-WorkMode }
+            "4" { Start-CustomMode }
+            "5" { Start-DeepClean }
+            "6" { Start-LiveMonitor; $pause = $false }
+            "7" { Show-SystemView }
+            "8" { Start-StartupManager; $pause = $false }
+            "9" { Restore-Normal }
+            "H" { Show-SessionHistory }
+            "C" {
+                Start-Process notepad.exe -ArgumentList "`"$ConfigFile`""
+                Write-Host "  Opened config in Notepad - restart Turbo Mode after saving." -ForegroundColor DarkGray
+                Start-Sleep -Seconds 2
+                $pause = $false
             }
+            "0" { Write-Host "  Bye!" -ForegroundColor DarkGray; return }
+            default { Write-Host "  Invalid!" -ForegroundColor Red; Start-Sleep -Seconds 1; $pause = $false }
+        }
+
+        if ($pause) {
             Write-Host ""
-            Read-Host "  Press Enter to go back"
-            Show-Menu
-            return
-        }
-        "6" { Restore-Normal }
-        "7" {
-            Write-Host "  Bye!" -ForegroundColor DarkGray
-            return
-        }
-        default {
-            Write-Host "  Invalid!" -ForegroundColor Red
-            Start-Sleep -Seconds 1
-            Show-Menu
-            return
+            Read-Host "  Press Enter to return to menu"
         }
     }
-
-    Write-Host ""
-    Read-Host "  Press Enter to return to menu"
-    Show-Menu
 }
 
 # --- RUN ---
-Show-Menu
+switch ($Mode) {
+    "Game"    { Start-GameMode }
+    "Work"    { Start-WorkMode }
+    "Clean"   { Start-DeepClean }
+    "Watch"   { Start-GameWatcher }
+    "Monitor" { Start-LiveMonitor }
+    "Restore" { Restore-Normal }
+    default   { Show-Menu }
+}
+if ($Mode -ne "Menu" -and -not $Yes) { Read-Host "  Press Enter to exit" }
