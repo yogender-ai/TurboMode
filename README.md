@@ -68,6 +68,11 @@ Nothing to install: it uses the .NET Framework that already ships with Windows 1
 | **Settings** | Add your games, apps that must never close, your ping server, and the re-close interval |
 | **Help & Guide** | All of these instructions inside the app |
 
+### 📱 9:16 Reel view
+Click **9:16 Reel view** (top-right) and the window turns into a vertical, exactly-9:16 layout: gauges and buttons stacked, live log underneath. Record it with Bandicam, OBS or Game Bar and it drops straight into Reels, Shorts or TikTok without cropping. Click **Normal view** to go back, or start in it with `TurboMode.exe --reel`.
+
+<p align="center"><img src="docs/reel-view.png" width="300" alt="9:16 reel view"></p>
+
 <p align="center">
   <img src="docs/startup.png" width="49%" alt="Startup apps">
   <img src="docs/help.png" width="49%" alt="Built-in help">
@@ -126,6 +131,7 @@ TurboMode-Console.exe                      # console menu
 TurboMode-Console.exe -Mode Watch          # Game Watcher
 TurboMode-Console.exe -Mode Game -Yes      # instant Game Mode, no prompts
 TurboMode.exe --watch                      # desktop app, start watching immediately
+TurboMode.exe --reel                       # desktop app in the vertical 9:16 layout
 ```
 Engine modes: `Menu | Game | Work | Clean | Watch | Monitor | Restore`. Flags: `-Yes`, `-NoDevCaches`, `-EmptyRecycleBin`.
 
@@ -156,6 +162,7 @@ User data lives in `%USERPROFILE%\.turbomode\`: `config.json`, `history.csv`, `t
 **v5.1**
 - 🚀 **Game Mode and Work Mode are much faster.** They no longer delete junk files, scan temp-folder sizes, or launch Windows Disk Cleanup. That cleanup kept running hidden in the background for minutes and slowed the disk while you played. Junk cleaning now lives only in **Deep Clean**.
 - 🎮 PUBG: Battlegrounds plus BlueStacks / Gameloop (BGMI, Free Fire) added to the default game list
+- 📱 **9:16 Reel view** button: vertical layout sized for Reels / Shorts recording
 - 🎥 Screen recorders (Bandicam, OBS, ShareX, ShadowPlay, Game Bar and others) are never closed, so recordings survive a boost
 
 **v5.0**

@@ -120,7 +120,9 @@ namespace TurboModeApp
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                 g.DrawString(Glyph, new Font("Segoe UI Symbol", 16f, FontStyle.Bold), b, circle, sf);
 
-            using (var b = new SolidBrush(Enabled ? Theme.Text : Theme.Muted)) g.DrawString(Heading, Theme.F(12f, FontStyle.Bold), b, Theme.P(72), Theme.P(12));
+            float fs = 12f;   // shrink long headings to fit narrow cards (9:16 reel view)
+            while (fs > 9f && g.MeasureString(Heading, Theme.F(fs, FontStyle.Bold)).Width > Width - Theme.P(78)) fs -= 0.5f;
+            using (var b = new SolidBrush(Enabled ? Theme.Text : Theme.Muted)) g.DrawString(Heading, Theme.F(fs, FontStyle.Bold), b, Theme.P(72), Theme.P(12));
             using (var b = new SolidBrush(Theme.Muted))
                 g.DrawString(Detail, Theme.F(8.75f), b, new RectangleF(Theme.P(73), Theme.P(38), Width - Theme.P(82), Height - Theme.P(40)));
         }
@@ -186,6 +188,16 @@ namespace TurboModeApp
         TextBox txtGames, txtGameKeep, txtWorkKeep, txtPingHost;
         NumericUpDown numInterval;
 
+        // 9:16 reel view (for recording vertical videos)
+        Panel navPanel;
+        Label lblSub, btnReel;
+        TableLayoutPanel gaugeGrid, cardGrid;
+        FlowLayoutPanel optsPanel;
+        SplitContainer bottomSplit;
+        bool reel;
+        Size normalSize;
+        FormWindowState normalState;
+
         Process running;
         string runningMode;
         bool loadingStartup;
@@ -239,6 +251,8 @@ namespace TurboModeApp
             FormClosing += OnClosingForm;
             if (args.Any(a => a.Equals("--watch", StringComparison.OrdinalIgnoreCase)))
                 Shown += delegate { StartWatcher(); };
+            if (args.Any(a => a.Equals("--reel", StringComparison.OrdinalIgnoreCase)))
+                Shown += delegate { SetReel(true); };
             // --page=startup|history|settings|help opens directly on that tab
             string page = args.Where(a => a.StartsWith("--page=", StringComparison.OrdinalIgnoreCase)).Select(a => a.Substring(7).ToLower()).FirstOrDefault();
             if (page == "startup") { LoadStartup(); ShowPage(pageStartup, navStartup); }
@@ -492,8 +506,16 @@ namespace TurboModeApp
             var sub = new Label { Text = "v5.1  -  one-click performance booster for gaming and work", Font = Theme.F(9.5f), ForeColor = Theme.Muted, AutoSize = true, BackColor = Color.Transparent };
             sub.Location = new Point(Theme.P(77), title.Top + title.PreferredHeight - Theme.P(4));
             lblGame = new Label { Text = "No game running", Font = Theme.F(10f, FontStyle.Bold), ForeColor = Theme.Muted, AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right, BackColor = Color.Transparent };
-            header.Controls.AddRange(new Control[] { pic, title, sub, lblGame });
-            header.Resize += delegate { lblGame.Location = new Point(header.Width - lblGame.Width - Theme.P(26), (header.Height - lblGame.Height) / 2); };
+            btnReel = new Label { Text = ReelOffText, Font = Theme.F(9f, FontStyle.Bold), ForeColor = Theme.Text, BackColor = Theme.Card, AutoSize = true,
+                Padding = new Padding(Theme.P(10), Theme.P(5), Theme.P(10), Theme.P(5)), Cursor = Cursors.Hand, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            btnReel.Click += delegate { SetReel(!reel); };
+            lblSub = sub;
+            header.Controls.AddRange(new Control[] { pic, title, sub, lblGame, btnReel });
+            header.Resize += delegate
+            {
+                btnReel.Location = new Point(header.Width - btnReel.Width - Theme.P(20), Theme.P(10));
+                lblGame.Location = new Point(header.Width - lblGame.Width - Theme.P(22), header.Height - lblGame.Height - Theme.P(10));
+            };
             Controls.Add(header);
         }
 
@@ -515,6 +537,7 @@ namespace TurboModeApp
             var foot = new Label { Text = "Runs as Administrator\nLogs: %USERPROFILE%\\.turbomode", ForeColor = Theme.Muted, Font = Theme.F(8f), Dock = DockStyle.Bottom, Height = Theme.P(48), Padding = new Padding(Theme.P(14), 0, 0, 0) };
             nav.Controls.Add(foot);
             Controls.Add(nav);
+            navPanel = nav;
         }
 
         void ShowPage(Panel page, NavButton btn)
@@ -583,7 +606,8 @@ namespace TurboModeApp
             bottom.Panel2.Controls.Add(lvTop);
             bottom.Panel2.Controls.Add(topTitle);
             bottom.Panel2.BackColor = Theme.Card;
-            page.Resize += delegate { try { bottom.SplitterDistance = Math.Max(Theme.P(200), bottom.Width - Theme.P(270)); } catch { } };
+            gaugeGrid = gauges; cardGrid = cards; optsPanel = opts; bottomSplit = bottom;
+            page.Resize += delegate { FitSplitter(); };
 
             page.Controls.Add(bottom);
             page.Controls.Add(statusBar);
@@ -591,6 +615,68 @@ namespace TurboModeApp
             page.Controls.Add(cards);
             page.Controls.Add(gauges);
             return page;
+        }
+
+        // ---------- 9:16 reel view ----------
+
+        const string ReelOffText = "▯  9:16 Reel view", ReelOnText = "▭  Normal view";
+
+        void FitSplitter()
+        {
+            if (bottomSplit.Panel2Collapsed) return;
+            try { bottomSplit.SplitterDistance = Math.Max(Theme.P(200), bottomSplit.Width - Theme.P(270)); } catch { }
+        }
+
+        static void Grid(TableLayoutPanel t, int cols, Control[] items)
+        {
+            t.SuspendLayout();
+            t.Controls.Clear(); t.ColumnStyles.Clear(); t.RowStyles.Clear();
+            int rows = (items.Length + cols - 1) / cols;
+            t.ColumnCount = cols; t.RowCount = rows;
+            for (int i = 0; i < cols; i++) t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / cols));
+            for (int i = 0; i < rows; i++) t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / rows));
+            for (int k = 0; k < items.Length; k++) t.Controls.Add(items[k], k % cols, k / cols);
+            t.ResumeLayout();
+        }
+
+        // Portrait window whose inside is exactly 9:16, with the dashboard stacked vertically
+        void SetReel(bool on)
+        {
+            if (on == reel) return;
+            reel = on;
+            var wa = Screen.FromControl(this).WorkingArea;
+            SuspendLayout();
+            if (on) { normalState = WindowState; WindowState = FormWindowState.Normal; normalSize = Size; ShowPage(pageDash, navDash); }
+            navPanel.Visible = !on;
+            lblSub.Visible = !on;
+            Grid(gaugeGrid, on ? 2 : 4, new Control[] { gCpu, gRam, gPing, gDisk });
+            gaugeGrid.Height = Theme.P(on ? 200 : 110);
+            Grid(cardGrid, on ? 2 : 3, new Control[] { cGame, cWatch, cWork, cClean, cRestore, cConsole });
+            cardGrid.Height = Theme.P(on ? 330 : 220);
+            optsPanel.Visible = !on;                 // cleanup options only matter for Deep Clean
+            bottomSplit.Panel2Collapsed = on;        // log gets the whole bottom; the Memory gauge already shows RAM
+            content.Padding = on ? new Padding(Theme.P(12), Theme.P(12), Theme.P(12), Theme.P(12))
+                                 : new Padding(Theme.P(22), Theme.P(16), Theme.P(22), Theme.P(16));
+            btnReel.Text = on ? ReelOnText : ReelOffText;
+            if (on)
+            {
+                MinimumSize = new Size(Theme.P(380), Theme.P(640));
+                int chromeH = Height - ClientSize.Height;
+                int ch = Math.Min(wa.Height - chromeH, Theme.P(1000));
+                ClientSize = new Size(ch * 9 / 16, ch);
+                Location = new Point(wa.Left + (wa.Width - Width) / 2, wa.Top + (wa.Height - Height) / 2);
+            }
+            else
+            {
+                MinimumSize = new Size(Math.Min(Theme.P(1080), wa.Width), Math.Min(Theme.P(720), wa.Height));
+                Size = normalSize;
+                Location = new Point(wa.Left + (wa.Width - Width) / 2, wa.Top + (wa.Height - Height) / 2);
+                WindowState = normalState;
+            }
+            ResumeLayout(true);
+            header.PerformLayout();
+            FitSplitter();
+            Log(on ? "9:16 reel view on: record this window for Reels / Shorts. Click \"Normal view\" to go back." : "Back to normal view.", Theme.Muted);
         }
 
         ActionCard Card(string h, string d, string glyph, Color c)
