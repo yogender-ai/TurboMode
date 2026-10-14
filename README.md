@@ -92,6 +92,7 @@ Already included: Valorant, CS2, Fortnite, Apex, GTA V, Rocket League, League of
 ## 🛡️ Is it safe?
 
 - **Only your own apps are closed.** Windows services, drivers, antivirus and anti-cheat are never touched.
+- **Screen recorders are never closed**, so your recording keeps running: Bandicam, OBS, Streamlabs, ShareX, Camtasia, NVIDIA ShadowPlay, AMD ReLive, Xbox Game Bar and more.
 - **Always confirms** before closing apps, and lists what's affected.
 - **Everything is reversible.** Use **Restore** for services, power plan and network, and re-tick anything in Startup Apps.
 - **No slowdown tricks.** It deliberately does *not* delete Prefetch / icon / font caches (that makes Windows slower).
@@ -155,6 +156,7 @@ User data lives in `%USERPROFILE%\.turbomode\`: `config.json`, `history.csv`, `t
 **v5.1**
 - 🚀 **Game Mode and Work Mode are much faster.** They no longer delete junk files, scan temp-folder sizes, or launch Windows Disk Cleanup. That cleanup kept running hidden in the background for minutes and slowed the disk while you played. Junk cleaning now lives only in **Deep Clean**.
 - 🎮 PUBG: Battlegrounds plus BlueStacks / Gameloop (BGMI, Free Fire) added to the default game list
+- 🎥 Screen recorders (Bandicam, OBS, ShareX, ShadowPlay, Game Bar and others) are never closed, so recordings survive a boost
 
 **v5.0**
 - 🖥️ **New desktop app**: dark UI, live gauges, one-click actions, startup manager, game history, settings and built-in help. High-DPI aware.

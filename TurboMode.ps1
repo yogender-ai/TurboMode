@@ -66,7 +66,16 @@ $SystemCritical = @(
     "nvcontainer", "NVDisplay.Container", "atieclxx", "atiesrxx",
     "RtkAudUService64", "IntelCpHDCPSvc", "igfxCUIService", "igfxEM",
     "vgc", "vgtray", "TurboMode",
-    "getscreen", "Getscreen", "FrameServer", "WindowsCamera"
+    "getscreen", "Getscreen", "FrameServer", "WindowsCamera",
+    # Screen recorders: closing one mid-recording loses the video, so they are never touched
+    "bdcam", "bdcam_nonadmin",                                   # Bandicam
+    "obs64", "obs32", "obs-ffmpeg-mux", "obs-browser-page",      # OBS Studio (+ its recording muxer)
+    "Streamlabs OBS", "Streamlabs Desktop",
+    "ShareX", "CamtasiaStudio", "CamRecorder", "fraps", "Action", "Loom", "ScreenRec",
+    "NVIDIA Share", "NVIDIA Overlay", "nvsphelper64",            # ShadowPlay / NVIDIA App
+    "RadeonSoftware", "AMDRSServ",                               # AMD ReLive
+    "GameBar", "GameBarFTServer", "GameBarPresenceWriter",       # Xbox Game Bar capture
+    "SnippingTool", "ScreenClippingHost"
 )
 
 # ---- GAME MODE KEEP LIST ----
