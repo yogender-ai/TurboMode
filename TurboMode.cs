@@ -112,7 +112,7 @@ namespace TurboModeApp
         {
             try
             {
-                Console.Title = "TURBO MODE v5.0 - Ultimate System Optimizer";
+                Console.Title = "TURBO MODE v5.1 - Ultimate System Optimizer";
 
                 // Enable VT100 colors if available
                 try

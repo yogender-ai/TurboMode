@@ -1,5 +1,5 @@
 # ============================================================
-#  TURBO MODE v5.0 - Ultimate System Optimizer
+#  TURBO MODE v5.1 - Ultimate System Optimizer
 #  Game Watcher | Live Monitor | Startup Manager | Before/After
 # ============================================================
 #  Usage:  TurboMode.ps1 [-Mode Menu|Game|Work|Clean|Watch|Monitor|Restore] [-Yes]
@@ -29,7 +29,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
-try { $Host.UI.RawUI.WindowTitle = "TURBO MODE v5.0" } catch {}
+try { $Host.UI.RawUI.WindowTitle = "TURBO MODE v5.1" } catch {}
 # True when the desktop app runs us in the background (output goes to its log window)
 $Headless = $false
 try { $Headless = [Console]::IsOutputRedirected } catch {}
@@ -91,8 +91,10 @@ $ConfigFile = "$TurboDir\config.json"
 $DefaultConfig = [ordered]@{
     GameProcesses      = @("VALORANT-Win64-Shipping", "cs2", "FortniteClient-Win64-Shipping",
                            "r5apex", "GTA5", "RocketLeague", "League of Legends",
-                           "Overwatch", "eldenring", "Cyberpunk2077", "bf2042")
-    ExtraGameKeep      = @()
+                           "Overwatch", "eldenring", "Cyberpunk2077", "bf2042",
+                           "TslGame",                                          # PUBG: Battlegrounds
+                           "HD-Player", "AndroidEmulatorEn", "AndroidEmulatorEx")  # BlueStacks / Gameloop (BGMI, Free Fire on PC)
+    ExtraGameKeep      = @("BstkSVC", "aow_exe")                              # emulator helpers the game needs
     ExtraWorkKeep      = @()
     WatcherIntervalSec = 15
     PingHost           = "1.1.1.1"
@@ -222,6 +224,8 @@ $ServicesToStop = @(
 #  DEEP SYSTEM SNAPSHOT - Kernel level stats
 # ============================================================
 function Get-SystemSnapshot {
+    # -WithTemp walks the temp/cache folders to size them: slow, so only Deep Clean and System View ask for it
+    param([switch]$WithTemp)
     $os = Get-CimInstance Win32_OperatingSystem
     $cpu = Get-CimInstance Win32_Processor
     $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
@@ -268,7 +272,7 @@ function Get-SystemSnapshot {
     } catch {}
 
     # Temp folder sizes
-    $tempSizes = Get-TempFolderSizes
+    $tempSizes = if ($WithTemp) { Get-TempFolderSizes } else { @{} }
 
     # Uptime
     $uptime = (Get-Date) - $os.LastBootUpTime
@@ -547,17 +551,8 @@ function Clean-TempFiles {
         } catch {}
     }
 
-    # Also clean Windows Disk Cleanup silently
-    try {
-        # Set all cleanup flags
-        $cleanupKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches"
-        Get-ChildItem $cleanupKey -ErrorAction SilentlyContinue | ForEach-Object {
-            Set-ItemProperty -Path $_.PSPath -Name "StateFlags0099" -Value 2 -Type DWord -ErrorAction SilentlyContinue
-        }
-        # Run cleanup
-        Start-Process cleanmgr -ArgumentList "/sagerun:99" -WindowStyle Hidden -ErrorAction SilentlyContinue
-        Write-Host "    [DEL] Windows Disk Cleanup triggered" -ForegroundColor DarkYellow
-    } catch {}
+    # Windows Disk Cleanup (cleanmgr /sagerun) was removed: it kept running hidden for
+    # minutes after Turbo Mode finished and hammered the disk while you played.
 
     Write-Host ""
     Write-Host "    >> Total cleaned: ~${totalCleaned} MB" -ForegroundColor Green
@@ -911,7 +906,7 @@ function Start-GameMode {
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-    Write-Host "  [1/4] KILLING BACKGROUND APPS..." -ForegroundColor Yellow
+    Write-Host "  [1/3] KILLING BACKGROUND APPS..." -ForegroundColor Yellow
     $procs = @(Get-KernelProcessList)
     $toKill = @()
     for ($i = 0; $i -lt $procs.Count; $i++) {
@@ -922,13 +917,11 @@ function Start-GameMode {
     if (-not (Confirm-Action "Save your work! Continue?")) { Write-Host "  Cancelled." -ForegroundColor DarkGray; return }
     Kill-SelectedProcesses -Processes $procs -Indices $toKill
 
-    Write-Host "  [2/4] CLEANING TEMP/JUNK..." -ForegroundColor Yellow
-    Clean-TempFiles
-
-    Write-Host "  [3/4] SYSTEM OPTIMIZATIONS..." -ForegroundColor Yellow
+    # No junk cleaning here: deleting files while you game only adds disk load. Use DEEP CLEAN for that.
+    Write-Host "  [2/3] SYSTEM OPTIMIZATIONS..." -ForegroundColor Yellow
     Run-SystemOptimizations
 
-    Write-Host "  [4/4] GAME PRIORITY..." -ForegroundColor Yellow
+    Write-Host "  [3/3] GAME PRIORITY..." -ForegroundColor Yellow
     $game = Get-RunningGame
     if ($game) {
         Set-GamePriority $game | Out-Null
@@ -966,7 +959,7 @@ function Start-WorkMode {
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-    Write-Host "  [1/3] KILLING BLOAT..." -ForegroundColor Yellow
+    Write-Host "  [1/2] KILLING BLOAT..." -ForegroundColor Yellow
     $procs = Get-KernelProcessList
     $toKill = @()
     for ($i = 0; $i -lt $procs.Count; $i++) {
@@ -977,10 +970,7 @@ function Start-WorkMode {
     }
     Kill-SelectedProcesses -Processes $procs -Indices $toKill
 
-    Write-Host "  [2/3] CLEANING TEMP/JUNK..." -ForegroundColor Yellow
-    Clean-TempFiles
-
-    Write-Host "  [3/3] SYSTEM OPTIMIZATIONS..." -ForegroundColor Yellow
+    Write-Host "  [2/2] SYSTEM OPTIMIZATIONS..." -ForegroundColor Yellow
     Run-SystemOptimizations
 
     $sw.Stop()
@@ -1023,13 +1013,10 @@ function Start-CustomMode {
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-    Write-Host "  [1/3] KILLING SELECTED..." -ForegroundColor Yellow
+    Write-Host "  [1/2] KILLING SELECTED..." -ForegroundColor Yellow
     Kill-SelectedProcesses -Processes $procs -Indices $selected
 
-    Write-Host "  [2/3] CLEANING TEMP/JUNK..." -ForegroundColor Yellow
-    Clean-TempFiles
-
-    Write-Host "  [3/3] OPTIMIZATIONS..." -ForegroundColor Yellow
+    Write-Host "  [2/2] OPTIMIZATIONS..." -ForegroundColor Yellow
     Run-SystemOptimizations
 
     $sw.Stop()
@@ -1051,7 +1038,7 @@ function Start-CustomMode {
 function Start-DeepClean {
     Show-Banner
     Write-Host "  Taking BEFORE snapshot..." -ForegroundColor DarkGray
-    $before = Get-SystemSnapshot
+    $before = Get-SystemSnapshot -WithTemp
     Show-Snapshot -Snap $before -Label "BEFORE - CURRENT STATE"
     Write-Host ""
 
@@ -1065,7 +1052,7 @@ function Start-DeepClean {
 
     Write-Host "  Taking AFTER snapshot..." -ForegroundColor DarkGray
     Start-Sleep -Seconds 2
-    $after = Get-SystemSnapshot
+    $after = Get-SystemSnapshot -WithTemp
 
     Show-Comparison -Before $before -After $after
     Write-Host ""
@@ -1391,7 +1378,7 @@ function Start-StartupManager {
 # ============================================================
 function Show-SystemView {
     Show-Banner
-    $snap = Get-SystemSnapshot
+    $snap = Get-SystemSnapshot -WithTemp
     Show-Snapshot -Snap $snap -Label "FULL SYSTEM REPORT"
 
     Write-Host "  RUNNING APPS (your session):" -ForegroundColor Cyan

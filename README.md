@@ -2,14 +2,20 @@
 
 <img src="docs/dashboard.png" width="820" alt="Turbo Mode dashboard">
 
-# ⚡ TURBO MODE v5.0
+# ⚡ TURBO MODE v5.1
 
 **One-click performance booster for Windows.** Free up RAM and CPU for games and work, then undo everything with one button. No commands, no setup.
+
+**100% offline · no account · no ads · no data leaves your PC · free & open source**
 
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)
 ![No install](https://img.shields.io/badge/Install-none%20needed-2ECC71?style=for-the-badge)
 ![C#](https://img.shields.io/badge/C%23-WinForms-512BD4?style=for-the-badge&logo=csharp&logoColor=white)
 ![PowerShell](https://img.shields.io/badge/Engine-PowerShell-5391FE?style=for-the-badge&logo=powershell&logoColor=white)
+![Offline](https://img.shields.io/badge/Works-100%25%20offline-111827?style=for-the-badge)
+![License](https://img.shields.io/badge/Price-free-F59E0B?style=for-the-badge)
+
+### [⬇️ Download TurboMode (ZIP)](https://github.com/yogender-ai/TurboMode/archive/refs/heads/main.zip)
 
 </div>
 
@@ -17,7 +23,7 @@
 
 ## 🚀 Getting started (30 seconds)
 
-1. **Download** this folder (Code → Download ZIP) and unzip it anywhere.
+1. **[Download the ZIP](https://github.com/yogender-ai/TurboMode/archive/refs/heads/main.zip)** and unzip it anywhere.
 2. **Double-click `TurboMode.exe`.**
 3. Windows asks *"Do you want to allow this app to make changes?"*. Click **Yes**.
    Turbo Mode needs admin rights to pause services and change the power plan.
@@ -41,7 +47,7 @@ Nothing to install: it uses the .NET Framework that already ships with Windows 1
 
 | Button | What happens | Closes apps? |
 |---|---|---|
-| ⚡ **Game Mode** | Instant boost: closes everything except your game and anti-cheat, cleans junk, max-performance power plan, high game priority | ✅ all except game |
+| ⚡ **Game Mode** | Instant boost in seconds: closes everything except your game and anti-cheat, frees RAM, max-performance power plan, high game priority. No disk cleanup, so nothing grinds your drive while you play | ✅ all except game |
 | ◎ **Game Watcher** | Same boost, but **automatic** when your game starts. Keeps background apps (Slack tray, Edge WebView, updaters) from sneaking back. Apps **you** open mid-game are left alone. Auto-restores when the game closes. | ✅ when game starts |
 | ⚒ **Work Mode** | Closes games, media players and bloat. Keeps your browser, IDE, Slack, Teams and Docker | only games and bloat |
 | ♻ **Deep Clean** | Deletes temp files, browser and Windows caches, crash dumps and shader cache. Optional: npm/pip/yarn/NuGet caches | ❌ never |
@@ -72,7 +78,16 @@ Nothing to install: it uses the .NET Framework that already ships with Windows 1
 2. Find the game's process, e.g. `eldenring.exe`
 3. In **Settings → Games to boost**, add `eldenring` (without `.exe`) → **Save**
 
-Already included: Valorant, CS2, Fortnite, Apex, GTA V, Rocket League, League of Legends, Overwatch, Elden Ring, Cyberpunk 2077, Battlefield 2042.
+Already included: Valorant, CS2, Fortnite, Apex, GTA V, Rocket League, League of Legends, Overwatch, Elden Ring, Cyberpunk 2077, Battlefield 2042, **PUBG: Battlegrounds**, and the **BlueStacks** and **Gameloop** emulators (for BGMI, Free Fire and other mobile games on PC).
+
+> Already used an older version? Your saved game list is kept. Add `TslGame`, `HD-Player` or `AndroidEmulatorEn` in **Settings** to get the new ones.
+
+## 🔒 Offline and private
+
+- Works with **no internet**. Nothing is downloaded, uploaded or tracked.
+- The only network call is the optional **ping gauge** (to `1.1.1.1` by default, change it in Settings).
+- No installer, no background service, no auto-start. Close it and it is gone.
+- All settings and logs stay in `%USERPROFILE%\.turbomode\` on your PC.
 
 ## 🛡️ Is it safe?
 
@@ -136,6 +151,10 @@ $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 User data lives in `%USERPROFILE%\.turbomode\`: `config.json`, `history.csv`, `turbomode.log`.
 
 ## 📝 Changelog
+
+**v5.1**
+- 🚀 **Game Mode and Work Mode are much faster.** They no longer delete junk files, scan temp-folder sizes, or launch Windows Disk Cleanup. That cleanup kept running hidden in the background for minutes and slowed the disk while you played. Junk cleaning now lives only in **Deep Clean**.
+- 🎮 PUBG: Battlegrounds plus BlueStacks / Gameloop (BGMI, Free Fire) added to the default game list
 
 **v5.0**
 - 🖥️ **New desktop app**: dark UI, live gauges, one-click actions, startup manager, game history, settings and built-in help. High-DPI aware.

@@ -1,5 +1,5 @@
 // ============================================================
-//  TURBO MODE v5.0 - Desktop app
+//  TURBO MODE v5.1 - Desktop app
 //  A friendly window on top of the TurboMode.ps1 engine.
 //  Build: see README (csc, .NET Framework 4.x - nothing to install)
 // ============================================================
@@ -198,7 +198,7 @@ namespace TurboModeApp
 
         public MainForm(string[] args)
         {
-            Text = "TURBO MODE v5.0";
+            Text = "TURBO MODE v5.1";
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
@@ -354,7 +354,7 @@ namespace TurboModeApp
             var r = MessageBox.Show(this,
                 "GAME MODE closes every open app except your game and its anti-cheat:\n\n" +
                 "  - browsers, chat apps, launchers and background helpers\n" +
-                "  - then cleans junk files and switches to max performance\n\n" +
+                "  - then frees RAM and switches to max performance (no slow disk cleanup)\n\n" +
                 "SAVE YOUR WORK FIRST. Unsaved changes in closed apps are lost.\n\nContinue?",
                 "Start Game Mode", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
             if (r == DialogResult.Yes) RunEngine("Game", CleanupArgs(), "Game Mode");
@@ -489,7 +489,7 @@ namespace TurboModeApp
             var pic = new PictureBox { Size = new Size(Theme.P(46), Theme.P(46)), Location = new Point(Theme.P(20), Theme.P(15)), SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.Transparent };
             try { pic.Image = new Icon(Icon, 48, 48).ToBitmap(); } catch { }
             var title = new Label { Text = "TURBO MODE", Font = Theme.F(19f, FontStyle.Bold), ForeColor = Theme.Text, AutoSize = true, Location = new Point(Theme.P(74), Theme.P(6)), BackColor = Color.Transparent };
-            var sub = new Label { Text = "v5.0  -  one-click performance booster for gaming and work", Font = Theme.F(9.5f), ForeColor = Theme.Muted, AutoSize = true, BackColor = Color.Transparent };
+            var sub = new Label { Text = "v5.1  -  one-click performance booster for gaming and work", Font = Theme.F(9.5f), ForeColor = Theme.Muted, AutoSize = true, BackColor = Color.Transparent };
             sub.Location = new Point(Theme.P(77), title.Top + title.PreferredHeight - Theme.P(4));
             lblGame = new Label { Text = "No game running", Font = Theme.F(10f, FontStyle.Bold), ForeColor = Theme.Muted, AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right, BackColor = Color.Transparent };
             header.Controls.AddRange(new Control[] { pic, title, sub, lblGame });
@@ -787,7 +787,7 @@ namespace TurboModeApp
 
         void LoadConfig()
         {
-            gameNames = new[] { "VALORANT-Win64-Shipping", "cs2", "FortniteClient-Win64-Shipping", "r5apex", "GTA5" };
+            gameNames = new[] { "VALORANT-Win64-Shipping", "cs2", "FortniteClient-Win64-Shipping", "r5apex", "GTA5", "TslGame", "HD-Player", "AndroidEmulatorEn", "AndroidEmulatorEx" };
             try
             {
                 if (!File.Exists(ConfigPath)) return;
@@ -909,7 +909,7 @@ namespace TurboModeApp
             item("4.  Play, then quit the game", "Everything is restored automatically and the session appears in Game History.");
 
             h("What each button does");
-            item("GAME MODE", "Instant boost: closes all apps except your game and anti-cheat, cleans junk files, sets the\nhigh-performance power plan and raises your game's priority if it is already running.");
+            item("GAME MODE", "Instant boost: closes all apps except your game and anti-cheat, frees RAM, sets the\nhigh-performance power plan and raises your game's priority if it is already running.");
             item("GAME WATCHER", "Same boost, but automatic. While you play it re-closes background apps that restart themselves\n(Slack tray, Edge WebView, updaters). Apps you open yourself (e.g. Discord) are left alone.\nClick STOP WATCHER at any time to stop and restore.");
             item("WORK MODE", "Closes only games, media players and bloat. Your browser, code editor, Slack, Teams and Docker stay open.");
             item("DEEP CLEAN", "Deletes temp files, browser caches, Windows Update leftovers, crash dumps and shader cache.\nWith the checkbox on it also clears npm / pip / yarn / NuGet caches (they re-download when needed).\nNo apps are closed.");
